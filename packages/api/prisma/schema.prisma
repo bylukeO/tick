@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  publicKey     String?
+  encryptedPriv String?
+  tickets       Ticket[]
+  transfersOut  Transfer[] @relation("from")
+  transfersIn   Transfer[] @relation("to")
+  createdAt     DateTime   @default(now())
+}
+
+model Event {
+  id       String   @id @default(cuid())
+  name     String
+  venue    String
+  startsAt DateTime
+  seatMap  Json
+  tickets  Ticket[]
+}
+
+model Ticket {
+  id            String       @id @default(cuid())
+  eventId       String
+  ownerId       String
+  section       String
+  row           String
+  seat          String
+  status        TicketStatus @default(ACTIVE)
+  qrPayload     String
+  originTicket  String?
+  transferCount Int          @default(0)
+  invalidatedAt      DateTime?
+  replacedByTicketId String?
+  createdAt     DateTime     @default(now())
+  event         Event        @relation(fields: [eventId], references: [id])
+  owner         User         @relation(fields: [ownerId], references: [id])
+  transfers     Transfer[]
+
+}
+
+model Transfer {
+  id          String         @id @default(cuid())
+  ticketId    String
+  fromUserId  String
+  toEmail     String
+  toUserId    String?
+  status      TransferStatus @default(PENDING)
+  proofHash   String
+  senderSig   String
+  receiverSig String?
+  createdAt   DateTime       @default(now())
+  acceptedAt  DateTime?
+  ticket      Ticket         @relation(fields: [ticketId], references: [id])
+  fromUser    User           @relation("from", fields: [fromUserId], references: [id])
+  toUser      User?          @relation("to", fields: [toUserId], references: [id])
+}
+
+enum TicketStatus {
+  ACTIVE
+  TRANSFER_PENDING
+  TRANSFERRED
+}
+
+enum TransferStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
