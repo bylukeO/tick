@@ -70,7 +70,8 @@ export async function createTransfer(params: {
 
   const timestamp = new Date().toISOString();
   const nonce = generateNonce();
-  const toIdentifier = recipient?.id || toEmail;
+  // Never put an unregistered recipient's email address in the public proof.
+  const toIdentifier = recipient?.id || `email:${computeSha256(toEmail)}`;
 
   const canonicalDoc = createCanonicalTransferDoc({
     ticketId: ticket.id,
@@ -389,16 +390,45 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
   }
 
   const checks: VerificationCheck[] = [];
-  const proofDocumentValid = Boolean(
-    transfer.proofDocument && computeSha256(transfer.proofDocument) === transfer.proofHash
-  );
+  let proofDocumentValid = false;
+  if (transfer.proofDocument) {
+    try {
+      const document = JSON.parse(transfer.proofDocument) as {
+        ticketId?: string;
+        from?: string;
+        to?: string;
+        ts?: string;
+        nonce?: string;
+      };
+      const recipientIdentifierMatches =
+        document.to === transfer.toUserId ||
+        document.to === `email:${computeSha256(transfer.toEmail)}`;
+      const canonicalDocument = createCanonicalTransferDoc({
+        ticketId: String(document.ticketId || ""),
+        from: String(document.from || ""),
+        to: String(document.to || ""),
+        ts: String(document.ts || ""),
+        nonce: String(document.nonce || ""),
+      });
+      proofDocumentValid =
+        Boolean(document.nonce) &&
+        document.ticketId === transfer.ticketId &&
+        document.from === transfer.fromUserId &&
+        recipientIdentifierMatches &&
+        new Date(String(document.ts)).getTime() === transfer.createdAt.getTime() &&
+        canonicalDocument === transfer.proofDocument &&
+        computeSha256(transfer.proofDocument) === transfer.proofHash;
+    } catch {
+      proofDocumentValid = false;
+    }
+  }
 
   checks.push({
     name: "proof_document_hash",
     passed: proofDocumentValid,
     details: proofDocumentValid
-      ? "Persisted canonical document matches the recorded SHA-256 hash"
-      : "Canonical document is missing or does not match the recorded hash",
+      ? "Canonical document fields, recipient binding, timestamp, and SHA-256 hash verified"
+      : "Canonical document is missing, malformed, mismatched, or does not match the recorded hash",
   });
 
   const senderPubkey = transfer.fromUser?.publicKey;
