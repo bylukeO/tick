@@ -63,6 +63,35 @@ describe("Ticket Claiming & QR Cryptography", () => {
     expect(envelopeVerification.envelope?.payload.seat).toBe("10");
   });
 
+  it("should require the correct account password to sign a ticket", async () => {
+    const missingPassword = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_arena_night",
+        section: "D",
+        row: "5",
+        seat: "8",
+      },
+    });
+    expect(missingPassword.statusCode).toBe(400);
+
+    const wrongPassword = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_arena_night",
+        section: "D",
+        row: "5",
+        seat: "8",
+        password: "not-the-account-password",
+      },
+    });
+    expect(wrongPassword.statusCode).toBe(401);
+  });
+
   it("should return 409 conflict when claiming an already-claimed seat", async () => {
     const duplicateClaim = await app.inject({
       method: "POST",
