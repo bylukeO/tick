@@ -76,6 +76,10 @@ export async function setupAuthPlugins(server: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const isMutatingMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(request.method);
       if (!isMutatingMethod) return;
+      // These endpoints do not mutate an authenticated user's account state.
+      if (["/api/auth/login", "/api/auth/register", "/api/verify/qr"].includes(request.routeOptions.url || "")) {
+        return;
+      }
 
       const authHeader = request.headers.authorization;
       if (authHeader && authHeader.startsWith("Bearer ")) return;
