@@ -226,7 +226,7 @@ if (reg.statusCode === 201) {
         eventId: "event_theater_gala",
         section: "A",
         row: "1",
-        seat: "10",
+        seat: "8",
         password: "demo1234",
       },
     });
@@ -363,7 +363,7 @@ if (reg.statusCode === 201) {
         eventId: "event_theater_gala",
         section: "A",
         row: "1",
-        seat: "9",
+        seat: "10",
         password: "demo1234",
       },
     });
