@@ -18,5 +18,9 @@ ALTER TABLE "Ticket"
   ADD COLUMN IF NOT EXISTS "invalidatedAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "replacedByTicketId" TEXT;
 
--- Preserve the seat-level uniqueness guarantee already present in the initial
--- migration; Prisma now declares the same compound unique constraint.
+-- A seat may have multiple historical ticket records after transfers,
+-- but only one ticket may be active or awaiting transfer at any moment.
+DROP INDEX IF EXISTS "Ticket_eventId_section_row_seat_key";
+CREATE UNIQUE INDEX IF NOT EXISTS "Ticket_active_seat_key"
+  ON "Ticket" ("eventId", "section", "row", "seat")
+  WHERE "status" IN ('ACTIVE', 'TRANSFER_PENDING');
