@@ -37,6 +37,7 @@ export const SeatMap: React.FC = () => {
     row: string;
     seat: string;
   } | null>(null);
+  const [claimPassword, setClaimPassword] = useState("");
 
   const { data, isLoading, error } = useQuery<EventDetailResponse>({
     queryKey: ["event", id],
@@ -45,7 +46,7 @@ export const SeatMap: React.FC = () => {
   });
 
   const claimMutation = useMutation({
-    mutationFn: (seatInfo: { section: string; row: string; seat: string }) =>
+    mutationFn: (seatInfo: { section: string; row: string; seat: string; password: string }) =>
       apiRequest<{ ticket: any; qrPng: string }>("/api/tickets/claim", {
         method: "POST",
         body: JSON.stringify({
@@ -53,7 +54,7 @@ export const SeatMap: React.FC = () => {
           section: seatInfo.section,
           row: seatInfo.row,
           seat: seatInfo.seat,
-          password: (window.prompt("Enter your password to confirm") || ""),
+          password: seatInfo.password,
         }),
       }),
     onSuccess: (result) => {
@@ -64,6 +65,7 @@ export const SeatMap: React.FC = () => {
         qrPng: result.qrPng,
         event: data?.event,
       });
+      setClaimPassword("");
       navigate("/wallet");
     },
   });
@@ -106,7 +108,7 @@ export const SeatMap: React.FC = () => {
       return;
     }
     if (selectedSeat) {
-      claimMutation.mutate(selectedSeat);
+      claimMutation.mutate({ ...selectedSeat, password: claimPassword });
     }
   };
 
@@ -114,17 +116,17 @@ export const SeatMap: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <span className="text-xs font-semibold uppercase text-blue-400 tracking-wider">
+          <span className="text-xs font-semibold uppercase text-indigo-600 tracking-wider">
             Interactive Seat Selection
           </span>
-          <h1 className="text-3xl font-extrabold text-white mt-1">{event.name}</h1>
-          <p className="text-sm text-slate-400">{event.venue}</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 mt-1">{event.name}</h1>
+          <p className="text-sm text-slate-500">{event.venue}</p>
         </div>
 
-        <div className="flex items-center space-x-6 text-xs bg-slate-800/80 p-3 rounded-xl border border-slate-700">
+        <div className="flex flex-wrap items-center gap-4 text-xs bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-            <span className="text-slate-300">Available</span>
+            <span className="text-slate-600">Available</span>
           </div>
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-blue-500"></span>
@@ -132,14 +134,14 @@ export const SeatMap: React.FC = () => {
           </div>
           <div className="flex items-center space-x-2">
             <span className="w-3 h-3 rounded-full bg-slate-600"></span>
-            <span className="text-slate-500">Claimed</span>
+            <span className="text-slate-400">Claimed</span>
           </div>
         </div>
       </div>
 
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 overflow-x-auto shadow-2xl flex flex-col items-center">
-        <div className="w-full max-w-2xl bg-gradient-to-b from-blue-900/40 to-transparent border-t-4 border-blue-500 rounded-t-3xl py-3 text-center mb-8">
-          <span className="text-xs font-black tracking-widest uppercase text-blue-300">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 overflow-x-auto shadow-sm flex flex-col items-center">
+        <div className="w-full min-w-[320px] max-w-2xl bg-gradient-to-b from-indigo-100 to-transparent border-t-4 border-indigo-500 rounded-t-3xl py-3 text-center mb-8">
+          <span className="text-xs font-black tracking-widest uppercase text-indigo-700">
             STAGE / PERFORMANCE AREA
           </span>
         </div>
@@ -152,9 +154,9 @@ export const SeatMap: React.FC = () => {
             return (
               <div
                 key={section}
-                className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 flex flex-col items-center"
+                className="bg-slate-50 border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-col items-center"
               >
-                <div className="text-sm font-bold text-slate-300 mb-4 tracking-wider">
+                <div className="text-sm font-bold text-slate-700 mb-4 tracking-wider">
                   SECTION {section}
                 </div>
 
@@ -174,11 +176,11 @@ export const SeatMap: React.FC = () => {
                               selectedSeat?.row === row &&
                               selectedSeat?.seat === seat;
 
-                            let btnClass = "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer";
+                            let btnClass = "bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer";
                             if (isClaimed) {
-                              btnClass = "bg-slate-700/60 text-slate-500 cursor-not-allowed opacity-40";
+                              btnClass = "bg-slate-200 text-slate-400 cursor-not-allowed";
                             } else if (isSelected) {
-                              btnClass = "bg-blue-500 ring-2 ring-white text-white font-bold";
+                              btnClass = "bg-indigo-600 ring-2 ring-indigo-200 text-white font-bold";
                             }
 
                             return (
@@ -205,17 +207,26 @@ export const SeatMap: React.FC = () => {
       </div>
 
       {selectedSeat && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 flex items-center space-x-6">
-          <div>
-            <div className="text-xs text-slate-400">Selected Reservation</div>
-            <div className="text-sm font-bold text-white">
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-2rem)] max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-slate-500">Selected seat</div>
+            <div className="text-sm font-bold text-slate-950">
               Sec {selectedSeat.section}, Row {selectedSeat.row}, Seat {selectedSeat.seat}
             </div>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={claimPassword}
+              onChange={(event) => setClaimPassword(event.target.value)}
+              placeholder="Confirm with your password"
+              aria-label="Account password to confirm ticket claim"
+              className="mt-2 min-h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+            />
           </div>
           <button
             onClick={handleClaim}
-            disabled={claimMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition"
+            disabled={claimMutation.isPending || !claimPassword}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition"
           >
             {claimMutation.isPending ? "Claiming..." : "Claim Ticket"}
           </button>
@@ -223,7 +234,7 @@ export const SeatMap: React.FC = () => {
       )}
 
       {claimMutation.isError && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 bg-rose-950 border border-rose-800 text-rose-300 px-4 py-2 rounded-xl text-xs">
+        <div className="fixed bottom-40 md:bottom-24 left-1/2 -translate-x-1/2 z-30 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-2 rounded-xl text-xs">
           {(claimMutation.error as any)?.message || "Claim failed"}
         </div>
       )}
