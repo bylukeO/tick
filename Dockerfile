@@ -14,7 +14,7 @@ COPY packages/web/package.json ./packages/web/package.json
 RUN corepack enable && PNPM_CONFIG_STRICT_DEP_BUILDS=false pnpm install --frozen-lockfile
 
 # Force argon2 to compile from source for the correct libc (glibc)
-RUN pnpm rebuild argon2 --build-from-source
+RUN npm_config_build_from_source=true pnpm rebuild argon2
 
 COPY packages/api ./packages/api
 
