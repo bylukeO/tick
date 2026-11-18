@@ -21,15 +21,19 @@ export function generateCsrfToken(): string {
 }
 
 export async function setupAuthPlugins(server: FastifyInstance): Promise<void> {
-  const jwtSecret = process.env.JWT_SECRET || "fallback_super_secret_jwt_key_at_least_32_bytes_long_123456";
+  const jwtSecret = process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === "production" && (!jwtSecret || jwtSecret.length < 32)) {
+    throw new Error("JWT_SECRET must be configured with at least 32 characters in production");
+  }
+  const signingSecret = jwtSecret || "local-development-only-jwt-secret-change-before-deploy-123456";
 
   await server.register(fastifyCookie, {
-    secret: jwtSecret,
+    secret: signingSecret,
     hook: "onRequest",
   });
 
   await server.register(fastifyJwt, {
-    secret: jwtSecret,
+    secret: signingSecret,
     cookie: {
       cookieName: "access_token",
       signed: false,
@@ -74,9 +78,7 @@ export async function setupAuthPlugins(server: FastifyInstance): Promise<void> {
       if (!isMutatingMethod) return;
 
       const authHeader = request.headers.authorization;
-      if (authHeader && authHeader.startsWith("Bearer ")) {
-        return;
-      }
+      if (authHeader && authHeader.startsWith("Bearer ")) return;
 
       const cookieCsrf = request.cookies.csrf_token;
       const headerCsrf =
