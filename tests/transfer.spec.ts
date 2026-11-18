@@ -137,6 +137,16 @@ if (reg.statusCode === 201) {
     expect(acceptData.transfer.receiverSig).toBeDefined();
     expect(acceptData.recipientTicket.id).toBe(`${ticketId}#${transfer.id}`);
 
+    const eventAfterTransfer = await app.inject({
+      method: "GET",
+      url: "/api/events/event_theater_gala",
+    });
+    const liveSeatRecords = eventAfterTransfer.json().claimedSeats.filter(
+      (seat: any) => seat.section === "A" && seat.row === "1" && seat.seat === "1"
+    );
+    expect(liveSeatRecords).toHaveLength(1);
+    expect(liveSeatRecords[0].ticketId).toBe(acceptData.recipientTicket.id);
+
     const anonymousHistory = await app.inject({
       method: "GET",
       url: `/api/tickets/${ticketId}/history`,
