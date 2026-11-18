@@ -43,7 +43,7 @@ export async function createTransfer(params: {
 
   const ticket = await db.ticket.findUnique({
     where: { id: ticketId },
-    include: { owner: true, event: true },
+    select: { id: true, ownerId: true, status: true },
   });
 
   if (!ticket) {
@@ -154,7 +154,14 @@ export async function acceptTransfer(params: {
 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
-    include: {
+    select: {
+      id: true,
+      ticketId: true,
+      fromUserId: true,
+      toEmail: true,
+      toUserId: true,
+      status: true,
+      proofHash: true,
       ticket: {
         select: {
           id: true,
@@ -167,8 +174,6 @@ export async function acceptTransfer(params: {
           status: true,
         },
       },
-      fromUser: { select: { id: true, email: true } },
-      toUser: { select: { id: true, email: true } },
     },
   });
 
@@ -181,7 +186,7 @@ export async function acceptTransfer(params: {
   }
 
   const recipientEmail = String(recipientUser.email || "").toLowerCase().trim();
-  const transferToEmail = String(transfer.toEmail || transfer.toUser?.email || "").toLowerCase().trim();
+  const transferToEmail = String(transfer.toEmail || "").toLowerCase().trim();
   const emailMatches = transferToEmail && transferToEmail === recipientEmail;
   const idMatches = transfer.toUserId && transfer.toUserId === recipientUser.id;
 
