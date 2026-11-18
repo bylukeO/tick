@@ -490,10 +490,21 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
       : "Sender signature verification failed",
   });
 
+  const receiverSignaturePresent = Boolean(transfer.receiverSig);
+  const receiverSignatureExpected = transfer.status === "ACCEPTED";
+  const receiverSignatureStateValid = receiverSignaturePresent === receiverSignatureExpected;
+  checks.push({
+    name: "receiver_signature_state",
+    passed: receiverSignatureStateValid,
+    details: receiverSignatureStateValid
+      ? "Receiver signature presence matches the transfer status"
+      : "Accepted transfers require a receiver signature, and non-accepted transfers must not have one",
+  });
+
   let receiverSigValid = true;
-  if (transfer.receiverSig) {
+  if (receiverSignaturePresent) {
     receiverSigValid = proofDocumentValid && receiverPubkey
-      ? verifyEd25519Signature(transfer.proofHash, transfer.receiverSig, receiverPubkey)
+      ? verifyEd25519Signature(transfer.proofHash, transfer.receiverSig!, receiverPubkey)
       : false;
 
     checks.push({
@@ -505,7 +516,8 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
     });
   }
 
-  const overallValid = proofDocumentValid && senderSigValid && receiverSigValid;
+  const overallValid =
+    proofDocumentValid && senderSigValid && receiverSigValid && receiverSignatureStateValid;
   const safeTransfer = {
     id: transfer.id,
     ticketId: transfer.ticketId,
