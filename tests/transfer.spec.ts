@@ -181,6 +181,7 @@ if (reg.statusCode === 201) {
     expect(transfer.toUserId).toBeNull();
     expect(transfer.toEmail).toBe("stranger@example.com");
     expect(transfer.status).toBe("PENDING");
+    expect(transfer.proofDocument).not.toContain("stranger@example.com");
 
     const originalTicket = await db.ticket.findUnique({ where: { id: ticketId } });
     expect(originalTicket.qrPayload).toBe(originalSenderQr);
@@ -222,6 +223,46 @@ if (reg.statusCode === 201) {
       where: { ticketId, status: "PENDING" },
     });
     expect(pendingTransfers).toHaveLength(1);
+  });
+
+  it("should reject a canonical proof document with altered ticket details", async () => {
+    const claimRes = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_theater_gala",
+        section: "A",
+        row: "1",
+        seat: "6",
+        password: "demo1234",
+      },
+    });
+    expect(claimRes.statusCode).toBe(201);
+    const ticketId = claimRes.json().ticket.id;
+
+    const transferRes = await app.inject({
+      method: "POST",
+      url: "/api/transfers",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: { ticketId, toEmail: "proof-check@example.test", password: "demo1234" },
+    });
+    expect(transferRes.statusCode).toBe(201);
+    const transferId = transferRes.json().transfer.id;
+    const transfer = await db.transfer.findUnique({ where: { id: transferId } });
+    const alteredDocument = JSON.parse(transfer.proofDocument);
+    alteredDocument.ticketId = "another-ticket";
+    await db.transfer.update({
+      where: { id: transferId },
+      data: { proofDocument: JSON.stringify(alteredDocument) },
+    });
+
+    const verifyRes = await app.inject({
+      method: "GET",
+      url: `/api/transfers/${transferId}/verify`,
+    });
+    expect(verifyRes.json().valid).toBe(false);
+    expect(verifyRes.json().checks.find((check: any) => check.name === "proof_document_hash")?.passed).toBe(false);
   });
 
   it("should reject transfer to sender email", async () => {
