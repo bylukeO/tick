@@ -43,6 +43,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "D",
         row: "5",
         seat: "10",
+        password: "demo1234",
       },
     });
 
@@ -72,6 +73,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "D",
         row: "5",
         seat: "10",
+        password: "demo1234",
       },
     });
 
@@ -89,6 +91,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "C",
         row: "4",
         seat: "9",
+        password: "demo1234",
       },
     });
 
