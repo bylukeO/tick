@@ -4,7 +4,7 @@ import { db } from "../lib/db";
 export async function eventRoutes(server: FastifyInstance): Promise<void> {
   server.get("/api/events", async (_request, reply) => {
     const events = await db.event.findMany();
-    const tickets = await db.ticket.findMany();
+    const tickets = await db.ticket.findMany({ select: { eventId: true } });
 
     const formattedEvents = events.map((ev: any) => {
       const eventTickets = tickets.filter((t: any) => t.eventId === ev.id);
