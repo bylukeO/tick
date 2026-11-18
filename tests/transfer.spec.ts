@@ -238,6 +238,27 @@ if (reg.statusCode === 201) {
 
     const originalTicket = await db.ticket.findUnique({ where: { id: ticketId } });
     expect(originalTicket.qrPayload).toBe(originalSenderQr);
+
+    const registration = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "stranger@example.com", password: "demo1234" },
+    });
+    expect(registration.statusCode).toBe(201);
+
+    const accept = await app.inject({
+      method: "POST",
+      url: `/api/transfers/${transfer.id}/accept`,
+      headers: { authorization: `Bearer ${registration.json().accessToken}` },
+      payload: { password: "demo1234" },
+    });
+    expect(accept.statusCode).toBe(200);
+
+    const verification = await app.inject({
+      method: "GET",
+      url: `/api/transfers/${transfer.id}/verify`,
+    });
+    expect(verification.json().valid).toBe(true);
   });
 
   it("should prevent two concurrent transfers from claiming the same ticket", async () => {
