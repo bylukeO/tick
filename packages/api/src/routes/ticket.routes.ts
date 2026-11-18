@@ -25,6 +25,9 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
       if (!eventId || !section || !row || !seat) {
         return reply.code(400).send({ error: "eventId, section, row, and seat are required" });
       }
+      if (!password) {
+        return reply.code(400).send({ error: "Account password is required to sign the ticket" });
+      }
 
       const event = await db.event.findUnique({ where: { id: eventId } });
       if (!event) {
@@ -44,7 +47,7 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         return reply.code(401).send({ error: "User not found" });
       }
 
-      const signingPassword = password || "demo1234";
+      const signingPassword = password;
       let privateKeyBase64: string;
 
       if (!user.publicKey || !user.encryptedPriv) {
