@@ -16,6 +16,7 @@ RUN corepack enable && PNPM_CONFIG_STRICT_DEP_BUILDS=false pnpm install --frozen
 # Force argon2 to compile from source for the correct libc (glibc)
 RUN npm_config_build_from_source=true pnpm rebuild argon2
 
+
 COPY packages/api ./packages/api
 
 WORKDIR /app/packages/api

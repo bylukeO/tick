@@ -1,34 +1,19 @@
-export async function apiRequest<T = any>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = localStorage.getItem("accessToken");
-  const csrfToken = localStorage.getItem("csrfToken");
+const API_BASE = import.meta.env.VITE_API_URL || ''
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  if (csrfToken) {
-    headers["x-csrf-token"] = csrfToken;
-  }
-
-  const response = await fetch(path, {
+export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers,
-    credentials: "include",
-  });
-
-  const data = await response.json().catch(() => ({}));
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    credentials: 'include',
+  })
 
   if (!response.ok) {
-    throw new Error(data.error || `HTTP error ${response.status}`);
+    const error = await response.json().catch(() => ({ error: 'Request failed' }))
+    throw new Error(error.error || error.message || 'Request failed')
   }
 
-  return data;
+  return response.json()
 }
