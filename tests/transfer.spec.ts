@@ -109,6 +109,7 @@ if (reg.statusCode === 201) {
     expect(transfer.toEmail).toBe("recipient_verify@test.local");
     expect(transfer.fromUser.passwordHash).toBeUndefined();
     expect(transfer.fromUser.encryptedPriv).toBeUndefined();
+    expect(transfer.ticket.qrPayload).toBeUndefined();
 
     const inbox = await app.inject({
       method: "GET",
@@ -118,6 +119,7 @@ if (reg.statusCode === 201) {
     expect(inbox.statusCode).toBe(200);
     expect(inbox.json().outgoing[0].fromUser.passwordHash).toBeUndefined();
     expect(inbox.json().outgoing[0].fromUser.encryptedPriv).toBeUndefined();
+    expect(inbox.json().outgoing[0].ticket.qrPayload).toBeUndefined();
 
     const acceptRes = await app.inject({
       method: "POST",
