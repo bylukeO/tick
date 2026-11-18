@@ -46,7 +46,6 @@ model Ticket {
   owner         User         @relation(fields: [ownerId], references: [id])
   transfers     Transfer[]
 
-  @@unique([eventId, section, row, seat])
 }
 
 model Transfer {
