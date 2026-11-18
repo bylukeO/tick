@@ -186,6 +186,44 @@ if (reg.statusCode === 201) {
     expect(originalTicket.qrPayload).toBe(originalSenderQr);
   });
 
+  it("should prevent two concurrent transfers from claiming the same ticket", async () => {
+    const claimRes = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_theater_gala",
+        section: "A",
+        row: "1",
+        seat: "5",
+        password: "demo1234",
+      },
+    });
+    expect(claimRes.statusCode).toBe(201);
+    const ticketId = claimRes.json().ticket.id;
+
+    const makeTransfer = (toEmail: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/transfers",
+        headers: { authorization: `Bearer ${aliceToken}` },
+        payload: { ticketId, toEmail, password: "demo1234" },
+      });
+
+    const results = await Promise.all([
+      makeTransfer("first-recipient@example.test"),
+      makeTransfer("second-recipient@example.test"),
+    ]);
+
+    expect(results.filter((result) => result.statusCode === 201)).toHaveLength(1);
+    expect(results.filter((result) => result.statusCode !== 201)).toHaveLength(1);
+
+    const pendingTransfers = await db.transfer.findMany({
+      where: { ticketId, status: "PENDING" },
+    });
+    expect(pendingTransfers).toHaveLength(1);
+  });
+
   it("should reject transfer to sender email", async () => {
     const claimRes = await app.inject({
       method: "POST",
