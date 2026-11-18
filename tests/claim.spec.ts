@@ -7,6 +7,7 @@ import { FastifyInstance } from "fastify";
 describe("Ticket Claiming & QR Cryptography", () => {
   let app: FastifyInstance;
   let aliceToken: string;
+  let aliceId: string;
   let bobToken: string;
 
   beforeAll(async () => {
@@ -20,6 +21,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
       payload: { email: "alice@demo.test", password: "demo1234" },
     });
     aliceToken = aliceRes.json().accessToken;
+    aliceId = aliceRes.json().user.id;
 
     const bobRes = await app.inject({
       method: "POST",
@@ -31,6 +33,34 @@ describe("Ticket Claiming & QR Cryptography", () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it("should keep refresh tokens out of protected routes and require them on refresh", async () => {
+    const refreshToken = app.jwt.sign(
+      { id: aliceId, email: "alice@demo.test", type: "refresh" },
+      { expiresIn: "1h" }
+    );
+
+    const refreshAsAccess = await app.inject({
+      method: "GET",
+      url: "/api/tickets",
+      headers: { authorization: `Bearer ${refreshToken}` },
+    });
+    expect(refreshAsAccess.statusCode).toBe(401);
+
+    const accessAsRefresh = await app.inject({
+      method: "POST",
+      url: "/api/auth/refresh",
+      headers: { cookie: `refresh_token=${aliceToken}` },
+    });
+    expect(accessAsRefresh.statusCode).toBe(401);
+
+    const validRefresh = await app.inject({
+      method: "POST",
+      url: "/api/auth/refresh",
+      headers: { cookie: `refresh_token=${refreshToken}` },
+    });
+    expect(validRefresh.statusCode).toBe(200);
   });
 
   it("should claim an unclaimed seat and return a valid signed QR payload and image", async () => {
