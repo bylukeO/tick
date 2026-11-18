@@ -44,24 +44,21 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
     include: { event: true, owner: true },
   });
 
-  const allTickets = await db.ticket.findMany({
+  const relatedTickets = await db.ticket.findMany({
+    where: {
+      OR: [{ id: rootOriginId }, { originTicket: rootOriginId }],
+    },
     include: { owner: true, event: true },
   });
-
-  const relatedTickets = allTickets.filter(
-    (t: any) => t.id === rootOriginId || t.originTicket === rootOriginId
-  );
 
   const relatedTicketIds = new Set(relatedTickets.map((t: any) => t.id));
   relatedTicketIds.add(rootOriginId);
 
-  const allTransfers = await db.transfer.findMany({
+  const relatedTransfers = await db.transfer.findMany({
+    where: { ticketId: { in: Array.from(relatedTicketIds) } },
     include: { fromUser: true, toUser: true, ticket: true },
+    orderBy: { createdAt: "asc" },
   });
-
-  const relatedTransfers = allTransfers
-    .filter((tr: any) => relatedTicketIds.has(tr.ticketId))
-    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const timeline: ProvenanceTimelineItem[] = [];
 
@@ -92,11 +89,15 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
         email: transfer.fromUser.email,
         publicKey: transfer.fromUser.publicKey,
       },
-      recipient: {
-        id: transfer.toUser.id,
-        email: transfer.toUser.email,
-        publicKey: transfer.toUser.publicKey,
-      },
+      ...(transfer.toUser
+        ? {
+            recipient: {
+              id: transfer.toUser.id,
+              email: transfer.toUser.email,
+              publicKey: transfer.toUser.publicKey,
+            },
+          }
+        : {}),
       details: {
         ticketId: transfer.ticketId,
         proofHash: transfer.proofHash,
