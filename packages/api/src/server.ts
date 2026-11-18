@@ -13,13 +13,13 @@ export async function buildServer(): Promise<FastifyInstance> {
     logger: process.env.NODE_ENV === "test" ? false : true,
   });
 
-  if (process.env.NODE_ENV === "production" && !process.env.CORS_ORIGINS) {
-    throw new Error("CORS_ORIGINS must be configured in production");
-  }
   const configuredOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  if (process.env.NODE_ENV === "production" && configuredOrigins.length === 0) {
+    throw new Error("CORS_ORIGINS must contain at least one allowed origin in production");
+  }
   const allowedOrigins = new Set(
     configuredOrigins.length
       ? configuredOrigins
