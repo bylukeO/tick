@@ -55,6 +55,14 @@ describe("Ticket Claiming & QR Cryptography", () => {
     expect(body.ticket.seat).toBe("10");
     expect(body.qrPng).toMatch(/^data:image\/png;base64,/);
 
+    const publicEvent = await app.inject({
+      method: "GET",
+      url: "/api/events/event_arena_night",
+    });
+    expect(publicEvent.statusCode).toBe(200);
+    expect(publicEvent.json().event.tickets).toBeUndefined();
+    expect(publicEvent.json().claimedSeats.some((seat: any) => seat.ticketId === body.ticket.id)).toBe(true);
+
     const envelopeVerification = verifySignedQrEnvelope(body.ticket.qrPayload);
     expect(envelopeVerification.valid).toBe(true);
     expect(envelopeVerification.expiredForDisplay).toBe(false);
