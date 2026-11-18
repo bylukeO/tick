@@ -34,6 +34,11 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: "Event not found" });
       }
 
+      const seatMap = event.seatMap as Record<string, Record<string, string[]>>;
+      if (!seatMap?.[section]?.[row]?.includes(seat)) {
+        return reply.code(400).send({ error: "The selected seat does not exist for this event" });
+      }
+
       const existingTicket = await db.ticket.findFirst({
         where: { eventId, section, row, seat },
       });
@@ -78,26 +83,34 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         user.publicKey
       );
 
-      const ticket = await db.ticket.create({
-        data: {
-          id: preliminaryId,
-          eventId,
-          ownerId: user.id,
-          section,
-          row,
-          seat,
-          status: "ACTIVE",
-          qrPayload: qrPayloadJson,
-          originTicket: null,
-          transferCount: 0,
-        },
-        include: { event: true },
-      });
+      try {
+        const ticket = await db.ticket.create({
+          data: {
+            id: preliminaryId,
+            eventId,
+            ownerId: user.id,
+            section,
+            row,
+            seat,
+            status: "ACTIVE",
+            qrPayload: qrPayloadJson,
+            originTicket: null,
+            transferCount: 0,
+          },
+          include: { event: true },
+        });
 
-      return reply.code(201).send({
-        ticket,
-        qrPng: qrPngDataUrl,
-      });
+        return reply.code(201).send({
+          ticket,
+          qrPng: qrPngDataUrl,
+        });
+      } catch (error: any) {
+        // The compound unique index is the final guard against concurrent claims.
+        if (error?.code === "P2002") {
+          return reply.code(409).send({ error: "Seat is already claimed" });
+        }
+        throw error;
+      }
     }
   );
 
