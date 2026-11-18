@@ -68,6 +68,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "1",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
@@ -115,6 +116,22 @@ if (reg.statusCode === 201) {
     expect(verifyRes.statusCode).toBe(200);
     const verifyData = verifyRes.json();
     expect(verifyData.valid).toBe(true);
+    const proofDocumentCheck = verifyData.checks.find((c: any) => c.name === "proof_document_hash");
+    expect(proofDocumentCheck?.passed).toBe(true);
+
+    const oldQrVerify = await app.inject({
+      method: "POST",
+      url: "/api/verify/qr",
+      payload: { qrPayload: originalSenderQr },
+    });
+    expect(oldQrVerify.json().valid).toBe(false);
+
+    const recipientQrVerify = await app.inject({
+      method: "POST",
+      url: "/api/verify/qr",
+      payload: { qrPayload: acceptData.recipientTicket.qrPayload },
+    });
+    expect(recipientQrVerify.json().valid).toBe(true);
 
     const senderCheck = verifyData.checks.find((c: any) => c.name === "sender_signature");
     const receiverCheck = verifyData.checks.find((c: any) => c.name === "receiver_signature");
@@ -142,6 +159,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "10",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
@@ -178,6 +196,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "11",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
@@ -206,6 +225,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "2",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
@@ -249,6 +269,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "3",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
@@ -290,6 +311,7 @@ if (reg.statusCode === 201) {
         section: "A",
         row: "1",
         seat: "4",
+        password: "demo1234",
       },
     });
     const ticketId = claimRes.json().ticket.id;
