@@ -31,7 +31,11 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
 }> {
   const currentTicket = await db.ticket.findUnique({
     where: { id: ticketId },
-    include: { event: true, owner: true, transfers: true },
+    include: {
+      event: true,
+      owner: { select: { id: true, email: true, publicKey: true } },
+      transfers: true,
+    },
   });
 
   if (!currentTicket) {
@@ -41,14 +45,20 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
   const rootOriginId = currentTicket.originTicket || currentTicket.id;
   const rootTicket = await db.ticket.findUnique({
     where: { id: rootOriginId },
-    include: { event: true, owner: true },
+    include: {
+      event: true,
+      owner: { select: { id: true, email: true, publicKey: true } },
+    },
   });
 
   const relatedTickets = await db.ticket.findMany({
     where: {
       OR: [{ id: rootOriginId }, { originTicket: rootOriginId }],
     },
-    include: { owner: true, event: true },
+    include: {
+      owner: { select: { id: true, email: true, publicKey: true } },
+      event: true,
+    },
   });
 
   const relatedTicketIds = new Set(relatedTickets.map((t: any) => t.id));
@@ -56,7 +66,11 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
 
   const relatedTransfers = await db.transfer.findMany({
     where: { ticketId: { in: Array.from(relatedTicketIds) } },
-    include: { fromUser: true, toUser: true, ticket: true },
+    include: {
+      fromUser: { select: { id: true, email: true, publicKey: true } },
+      toUser: { select: { id: true, email: true, publicKey: true } },
+      ticket: true,
+    },
     orderBy: { createdAt: "asc" },
   });
 
