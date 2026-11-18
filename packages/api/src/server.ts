@@ -13,12 +13,30 @@ export async function buildServer(): Promise<FastifyInstance> {
     logger: process.env.NODE_ENV === "test" ? false : true,
   });
 
+  if (process.env.NODE_ENV === "production" && !process.env.CORS_ORIGINS) {
+    throw new Error("CORS_ORIGINS must be configured in production");
+  }
+  const configuredOrigins = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const allowedOrigins = new Set(
+    configuredOrigins.length
+      ? configuredOrigins
+      : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173"]
+  );
+
   await server.register(fastifyCors, {
     origin: (origin, callback) => {
-      callback(null, true);
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Origin not allowed"), false);
+      }
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-XSRF-Token"],
   });
 
   await server.register(fastifyRateLimit, {
@@ -27,6 +45,11 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await setupAuthPlugins(server);
+  if (process.env.NODE_ENV !== "test") {
+    server.addHook("preHandler", (request, reply) =>
+      (server as any).verifyCsrf(request, reply)
+    );
+  }
 
   await server.register(authRoutes);
   await server.register(eventRoutes);

@@ -60,8 +60,13 @@ export async function createTransfer(params: {
 
   const recipient = await db.user.findUnique({ where: { email: toEmail } });
 
-  const senderPassword = params.senderPassword || "demo1234";
-  const decryptedSenderPriv = decryptPrivateKey(senderUser.encryptedPriv, senderPassword);
+  if (!params.senderPassword) {
+    throw new Error("Account password is required to authorize this transfer");
+  }
+  if (!senderUser.encryptedPriv) {
+    throw new Error("Sender signing key is unavailable");
+  }
+  const decryptedSenderPriv = decryptPrivateKey(senderUser.encryptedPriv, params.senderPassword);
 
   const timestamp = new Date().toISOString();
   const nonce = generateNonce();
@@ -148,10 +153,15 @@ export async function acceptTransfer(params: {
     await db.transfer.update({ where: { id: transfer.id }, data: { toUserId: recipientUser.id } });
   }
 
-  const recipientPassword = params.recipientPassword || "demo1234";
+  if (!params.recipientPassword) {
+    throw new Error("Account password is required to accept this transfer");
+  }
+  if (!recipientUser.encryptedPriv || !recipientUser.publicKey) {
+    throw new Error("Recipient signing key is unavailable");
+  }
   const decryptedRecipientPriv = decryptPrivateKey(
     recipientUser.encryptedPriv,
-    recipientPassword
+    params.recipientPassword
   );
 
   const receiverSig = signWithEd25519(transfer.proofHash, decryptedRecipientPriv);
