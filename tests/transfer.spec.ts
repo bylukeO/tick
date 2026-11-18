@@ -200,6 +200,21 @@ if (reg.statusCode === 201) {
     expect(originalTicketAfterTransfer.replacedByTicketId).toBe(
       `${ticketId}#${transfer.id}`
     );
+
+    await db.transfer.update({
+      where: { id: transfer.id },
+      data: { receiverSig: null },
+    });
+    const missingReceiverSignature = await app.inject({
+      method: "GET",
+      url: `/api/transfers/${transfer.id}/verify`,
+    });
+    expect(missingReceiverSignature.json().valid).toBe(false);
+    expect(
+      missingReceiverSignature.json().checks.find(
+        (check: any) => check.name === "receiver_signature_state"
+      )?.passed
+    ).toBe(false);
   });
 
   it("should allow transfer to unregistered email and store null toUserId", async () => {
