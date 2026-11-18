@@ -14,7 +14,7 @@ test.describe("Ticket transfer flow", () => {
     await expect(page).toHaveURL(/\/wallet/);
 
     await page.goto("/");
-    await page.locator('a:has-text("Select Seats")').first().click();
+    await page.locator('a:has-text("Explore seats")').first().click();
     await expect(page).toHaveURL(/\/events\//);
 
     const availableSeat = page.locator('button[title^="Sec "].bg-emerald-500').first();
