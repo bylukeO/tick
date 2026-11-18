@@ -159,8 +159,8 @@ export async function transferRoutes(server: FastifyInstance): Promise<void> {
         },
         include: {
           ticket: { include: { event: true } },
-          fromUser: true,
-          toUser: true,
+          fromUser: { select: { id: true, email: true, publicKey: true } },
+          toUser: { select: { id: true, email: true, publicKey: true } },
         },
       });
 
