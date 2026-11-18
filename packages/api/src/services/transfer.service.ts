@@ -383,9 +383,9 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
     include: {
-      fromUser: true,
-      toUser: true,
-      ticket: { include: { event: true } },
+      fromUser: { select: { id: true, publicKey: true } },
+      toUser: { select: { id: true, publicKey: true } },
+      ticket: { select: { id: true } },
     },
   });
 
