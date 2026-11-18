@@ -34,7 +34,7 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
     include: {
       event: true,
       owner: { select: { id: true, email: true, publicKey: true } },
-      transfers: true,
+      transfers: { select: { id: true } },
     },
   });
 
@@ -69,7 +69,7 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
     include: {
       fromUser: { select: { id: true, email: true, publicKey: true } },
       toUser: { select: { id: true, email: true, publicKey: true } },
-      ticket: true,
+      ticket: { select: { id: true } },
     },
     orderBy: { createdAt: "asc" },
   });
