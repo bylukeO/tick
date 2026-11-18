@@ -19,82 +19,81 @@ export const Auth: React.FC = () => {
     setLocalError(null);
 
     try {
-      if (isRegister) {
-        await register(email, password);
-      } else {
-        await login(email, password);
-      }
+      if (isRegister) await register(email, password);
+      else await login(email, password);
       navigate("/wallet");
-    } catch (err: any) {
-      setLocalError("Something went wrong. Please try again.");
+    } catch {
+      setLocalError("We couldn’t complete that request. Check your details and try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-16">
-      <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
-        <div className="text-center mb-8">
-          <span className="text-2xl font-bold tracking-tight text-[#026cdf]">ticketmaster</span>
-          <h2 className="text-xl font-bold text-slate-900 mt-3">
-            {isRegister ? "Create Account" : "Sign In"}
-          </h2>
+    <div className="relative isolate flex min-h-[calc(100vh-4rem)] items-center justify-center overflow-hidden bg-slate-50 px-4 py-12">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.12),_transparent_55%)]" />
+      <div className="w-full max-w-md">
+        <div className="mb-7 text-center">
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-lg font-black text-white">S</span>
+            <span className="text-2xl font-extrabold tracking-tight text-slate-950">StagePass</span>
+          </Link>
+          <h1 className="mt-6 text-2xl font-extrabold tracking-tight text-slate-950">
+            {isRegister ? "Create your account" : "Welcome back"}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {isRegister ? "A better place to keep your live-event plans together." : "Sign in to get back to your tickets."}
+          </p>
         </div>
 
-        {(localError || authError) && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded mb-6">
-            {localError || "Something went wrong. Please try again."}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email address"
-              className="w-full bg-white border border-slate-300 rounded px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-[#026cdf]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-white border border-slate-300 rounded px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-[#026cdf]"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-[#026cdf] hover:bg-[#0150a5] disabled:opacity-50 text-white font-semibold py-2.5 rounded text-sm transition mt-2"
-            style={{ borderRadius: 4 }}
-          >
-            {isSubmitting ? "Please wait..." : isRegister ? "Create Account" : "Sign In"}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-6 border-t border-slate-200 text-center text-sm text-slate-600">
-          {isRegister ? (
-            <span>
-              Already have an account?{" "}
-              <Link to="/login" className="text-[#026cdf] hover:underline font-semibold">Sign In</Link>
-            </span>
-          ) : (
-            <span>
-              New to Ticketmaster?{" "}
-              <Link to="/register" className="text-[#026cdf] hover:underline font-semibold">Sign Up</Link>
-            </span>
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8">
+          {(localError || authError) && (
+            <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+              {localError || "Something went wrong. Please try again."}
+            </div>
           )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="auth-email" className="mb-1.5 block text-sm font-semibold text-slate-700">Email address</label>
+              <input
+                id="auth-email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="auth-password" className="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
+              <input
+                id="auth-password"
+                type="password"
+                autoComplete={isRegister ? "new-password" : "current-password"}
+                required
+                minLength={isRegister ? 6 : undefined}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10"
+              />
+            </div>
+
+            <button type="submit" disabled={isSubmitting} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+              {isSubmitting ? "Please wait…" : isRegister ? "Create account" : "Sign in"}
+            </button>
+          </form>
+
+          <div className="mt-6 border-t border-slate-100 pt-5 text-center text-sm text-slate-500">
+            {isRegister ? "Already have an account?" : "New to StagePass?"}{" "}
+            <Link to={isRegister ? "/login" : "/register"} className="font-bold text-indigo-600 hover:text-indigo-700">
+              {isRegister ? "Sign in" : "Create an account"}
+            </Link>
+          </div>
         </div>
       </div>
     </div>
