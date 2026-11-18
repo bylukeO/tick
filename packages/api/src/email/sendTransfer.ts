@@ -38,6 +38,6 @@ export async function sendTransferEmail(args: TransferEmailArgs): Promise<void> 
       }),
     })
   } catch (err: any) {
-    throw new Error(`Zoho SMTP send failed: ${err.message}`)
+    throw new Error(`SMTP send failed: ${err.message}`)
   }
 }

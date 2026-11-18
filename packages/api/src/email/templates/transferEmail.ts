@@ -1,9 +1,11 @@
 export interface TransferEmailTemplateArgs {
-  senderName: string;
-  eventName: string;
-  eventDate: string;
-  venue: string;
-  seatList: string;
+  senderName: string
+  eventName: string
+  eventDate: string
+  venue: string
+  seatList: string
+  acceptUrl: string
+  declineUrl: string
 }
 
 export function transferEmailHtml(args: TransferEmailTemplateArgs): string {
