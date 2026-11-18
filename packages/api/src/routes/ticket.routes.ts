@@ -165,13 +165,27 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
     }
   );
 
-  server.get("/api/tickets/:id/history", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      const history = await getTicketProvenanceHistory(id);
-      return reply.send(history);
-    } catch {
-      return reply.code(404).send({ error: "Ticket history not found" });
+  server.get(
+    "/api/tickets/:id/history",
+    { preHandler: [(server as any).authenticate] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const history = await getTicketProvenanceHistory(id);
+        const userId = request.user!.id;
+        const isRelatedHolder = history.allHolders.some((holder: any) => holder.ownerId === userId);
+        const isRelatedTransferParty = history.timeline.some(
+          (item: any) => item.actor?.id === userId || item.recipient?.id === userId
+        );
+
+        if (!isRelatedHolder && !isRelatedTransferParty) {
+          return reply.code(403).send({ error: "You are not authorized to view this ticket history" });
+        }
+
+        return reply.send(history);
+      } catch {
+        return reply.code(404).send({ error: "Ticket history not found" });
+      }
     }
-  });
+  );
 }
