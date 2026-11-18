@@ -177,18 +177,21 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
           httpOnly: true,
           path: "/",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
           maxAge: ACCESS_TOKEN_TTL_SECONDS,
         })
         .setCookie("refresh_token", newRefreshToken, {
           httpOnly: true,
           path: "/api/auth/refresh",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
           maxAge: REFRESH_TOKEN_TTL_SECONDS,
         })
         .setCookie("csrf_token", csrfToken, {
           httpOnly: false,
           path: "/",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
         });
 
       return reply.send({
