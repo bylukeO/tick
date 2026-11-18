@@ -114,8 +114,8 @@ export async function createTransfer(params: {
       },
       include: {
         ticket: { include: { event: true } },
-        fromUser: true,
-        toUser: true,
+        fromUser: { select: { id: true, email: true, publicKey: true } },
+        toUser: { select: { id: true, email: true, publicKey: true } },
       },
     });
   });
@@ -142,7 +142,11 @@ export async function acceptTransfer(params: {
 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
-    include: { ticket: { include: { event: true } }, fromUser: true, toUser: true },
+    include: {
+      ticket: { include: { event: true } },
+      fromUser: { select: { id: true, email: true } },
+      toUser: { select: { id: true, email: true } },
+    },
   });
 
   if (!transfer) {
@@ -238,15 +242,15 @@ export async function acceptTransfer(params: {
         originTicket: rootOriginId,
         transferCount: originalTicket.transferCount || 0,
       },
-      include: { event: true, owner: true },
+      include: { event: true, owner: { select: { id: true, email: true, publicKey: true } } },
     });
 
     const updated = await tx.transfer.findUnique({
       where: { id: transfer.id },
       include: {
         ticket: { include: { event: true } },
-        fromUser: true,
-        toUser: true,
+        fromUser: { select: { id: true, email: true, publicKey: true } },
+        toUser: { select: { id: true, email: true, publicKey: true } },
       },
     });
     if (!updated) throw new Error("Transfer record disappeared during acceptance");
@@ -350,9 +354,9 @@ export async function getTransferProofDetails(transferId: string): Promise<any> 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
     include: {
-      fromUser: true,
-      toUser: true,
-      ticket: { include: { event: true } },
+      fromUser: { select: { id: true, publicKey: true } },
+      toUser: { select: { id: true, publicKey: true } },
+      ticket: { select: { id: true } },
     },
   });
 
