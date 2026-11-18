@@ -149,7 +149,7 @@ if (reg.statusCode === 201) {
     );
   });
 
-  it("should allow transfer to unregistered email and store null toUserId/toEmail", async () => {
+  it("should allow transfer to unregistered email and store null toUserId", async () => {
     const claimRes = await app.inject({
       method: "POST",
       url: "/api/tickets/claim",
@@ -233,7 +233,7 @@ if (reg.statusCode === 201) {
         eventId: "event_theater_gala",
         section: "A",
         row: "1",
-        seat: "11",
+        seat: "9",
         password: "demo1234",
       },
     });
