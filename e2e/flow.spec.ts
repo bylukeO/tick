@@ -14,14 +14,14 @@ test.describe("Ticket transfer flow", () => {
     await expect(page).toHaveURL(/\/wallet/);
 
     await page.goto("/");
-    await page.locator('a:has-text("Explore seats")').first().click();
+    await page.locator('a:has-text("Select Seats")').first().click();
     await expect(page).toHaveURL(/\/events\//);
 
-    const availableSeat = page.locator('button[title^="Sec "].bg-emerald-500').first();
+    const availableSeat = page.locator("button.bg-emerald-600").first();
     await expect(availableSeat).toBeVisible();
 
+    page.once("dialog", (dialog) => dialog.accept(password));
     await availableSeat.click();
-    await page.getByLabel("Account password to confirm ticket claim").fill(password);
     await page.locator('button:has-text("Claim Ticket")').click();
 
     await expect(page).toHaveURL(/\/wallet/, { timeout: 20000 });
