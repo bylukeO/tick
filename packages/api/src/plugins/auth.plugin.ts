@@ -57,7 +57,10 @@ export async function setupAuthPlugins(server: FastifyInstance): Promise<void> {
           return reply.code(401).send({ error: "Authentication required" });
         }
 
-        const decoded = server.jwt.verify<AuthenticatedUser>(token);
+        const decoded = server.jwt.verify<AuthenticatedUser & { type?: string }>(token);
+        if (decoded.type === "refresh") {
+          return reply.code(401).send({ error: "Access token required" });
+        }
         const user = await db.user.findUnique({ where: { id: decoded.id } });
 
         if (!user) {

@@ -8,6 +8,7 @@ import {
 } from "../lib/crypto";
 import { createSignedQrPayload } from "../services/ticket.service";
 import { getTicketProvenanceHistory } from "../services/history.service";
+import { verifyPassword } from "../services/auth.service";
 
 export async function ticketRoutes(server: FastifyInstance): Promise<void> {
   server.post(
@@ -34,8 +35,20 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: "Event not found" });
       }
 
+      const seatMap = event.seatMap as Record<string, Record<string, string[]>>;
+      const validSeats = seatMap?.[section]?.[row];
+      if (!Array.isArray(validSeats) || !validSeats.includes(seat)) {
+        return reply.code(400).send({ error: "The selected seat does not exist for this event" });
+      }
+
       const existingTicket = await db.ticket.findFirst({
-        where: { eventId, section, row, seat },
+        where: {
+          eventId,
+          section,
+          row,
+          seat,
+          status: { in: ["ACTIVE", "TRANSFER_PENDING"] },
+        },
       });
 
       if (existingTicket) {
@@ -48,8 +61,12 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
       }
 
       const signingPassword = password;
-      let privateKeyBase64: string;
+      const passwordMatches = await verifyPassword(user.passwordHash, signingPassword);
+      if (!passwordMatches) {
+        return reply.code(401).send({ error: "Incorrect account password" });
+      }
 
+      let privateKeyBase64: string;
       if (!user.publicKey || !user.encryptedPriv) {
         const keyPair = generateEd25519KeyPair();
         const encryptedPriv = encryptPrivateKey(keyPair.privateKey, signingPassword);
@@ -61,7 +78,11 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         user.encryptedPriv = encryptedPriv;
         privateKeyBase64 = keyPair.privateKey;
       } else {
-        privateKeyBase64 = decryptPrivateKey(user.encryptedPriv, signingPassword);
+        try {
+          privateKeyBase64 = decryptPrivateKey(user.encryptedPriv, signingPassword);
+        } catch {
+          return reply.code(401).send({ error: "Incorrect account password" });
+        }
       }
 
       const preliminaryId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -78,26 +99,34 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         user.publicKey
       );
 
-      const ticket = await db.ticket.create({
-        data: {
-          id: preliminaryId,
-          eventId,
-          ownerId: user.id,
-          section,
-          row,
-          seat,
-          status: "ACTIVE",
-          qrPayload: qrPayloadJson,
-          originTicket: null,
-          transferCount: 0,
-        },
-        include: { event: true },
-      });
+      try {
+        const ticket = await db.ticket.create({
+          data: {
+            id: preliminaryId,
+            eventId,
+            ownerId: user.id,
+            section,
+            row,
+            seat,
+            status: "ACTIVE",
+            qrPayload: qrPayloadJson,
+            originTicket: null,
+            transferCount: 0,
+          },
+          include: { event: true },
+        });
 
-      return reply.code(201).send({
-        ticket,
-        qrPng: qrPngDataUrl,
-      });
+        return reply.code(201).send({
+          ticket,
+          qrPng: qrPngDataUrl,
+        });
+      } catch (error: any) {
+        // The compound unique index is the final guard against concurrent claims.
+        if (error?.code === "P2002") {
+          return reply.code(409).send({ error: "Seat is already claimed" });
+        }
+        throw error;
+      }
     }
   );
 
@@ -140,9 +169,24 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
     { preHandler: [(server as any).authenticate] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const ticket = await db.ticket.findUnique({
-        where: { id },
-        include: { event: true, owner: true, transfers: true },
+      const ticket = await db.ticket.findFirst({
+        where: { id, ownerId: request.user!.id },
+        include: {
+          event: true,
+          owner: { select: { id: true, email: true, publicKey: true } },
+          transfers: {
+            select: {
+              id: true,
+              status: true,
+              toEmail: true,
+              proofHash: true,
+              senderSig: true,
+              receiverSig: true,
+              createdAt: true,
+              acceptedAt: true,
+            },
+          },
+        },
       });
 
       if (!ticket) {
@@ -165,13 +209,27 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
     }
   );
 
-  server.get("/api/tickets/:id/history", async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      const history = await getTicketProvenanceHistory(id);
-      return reply.send(history);
-    } catch {
-      return reply.code(404).send({ error: "Ticket history not found" });
+  server.get(
+    "/api/tickets/:id/history",
+    { preHandler: [(server as any).authenticate] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const history = await getTicketProvenanceHistory(id);
+        const userId = request.user!.id;
+        const isRelatedHolder = history.allHolders.some((holder: any) => holder.ownerId === userId);
+        const isRelatedTransferParty = history.timeline.some(
+          (item: any) => item.actor?.id === userId || item.recipient?.id === userId
+        );
+
+        if (!isRelatedHolder && !isRelatedTransferParty) {
+          return reply.code(403).send({ error: "You are not authorized to view this ticket history" });
+        }
+
+        return reply.send(history);
+      } catch {
+        return reply.code(404).send({ error: "Ticket history not found" });
+      }
     }
-  });
+  );
 }

@@ -49,18 +49,21 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
         httpOnly: true,
         path: "/",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: ACCESS_TOKEN_TTL_SECONDS,
       })
       .setCookie("refresh_token", refreshToken, {
         httpOnly: true,
         path: "/api/auth/refresh",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: REFRESH_TOKEN_TTL_SECONDS,
       })
       .setCookie("csrf_token", csrfToken, {
         httpOnly: false,
         path: "/",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       });
 
     return reply.code(201).send({
@@ -115,18 +118,21 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
         httpOnly: true,
         path: "/",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: ACCESS_TOKEN_TTL_SECONDS,
       })
       .setCookie("refresh_token", refreshToken, {
         httpOnly: true,
         path: "/api/auth/refresh",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
         maxAge: REFRESH_TOKEN_TTL_SECONDS,
       })
       .setCookie("csrf_token", csrfToken, {
         httpOnly: false,
         path: "/",
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       });
 
     return reply.send({
@@ -147,6 +153,9 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
       const decoded = server.jwt.verify<{ id: string; email: string; type?: string }>(
         refreshToken
       );
+      if (decoded.type !== "refresh") {
+        return reply.code(401).send({ error: "Invalid refresh token" });
+      }
 
       const user = await db.user.findUnique({ where: { id: decoded.id } });
       if (!user) {
@@ -168,18 +177,21 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
           httpOnly: true,
           path: "/",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
           maxAge: ACCESS_TOKEN_TTL_SECONDS,
         })
         .setCookie("refresh_token", newRefreshToken, {
           httpOnly: true,
           path: "/api/auth/refresh",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
           maxAge: REFRESH_TOKEN_TTL_SECONDS,
         })
         .setCookie("csrf_token", csrfToken, {
           httpOnly: false,
           path: "/",
           sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
         });
 
       return reply.send({

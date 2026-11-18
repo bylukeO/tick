@@ -31,7 +31,11 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
 }> {
   const currentTicket = await db.ticket.findUnique({
     where: { id: ticketId },
-    include: { event: true, owner: true, transfers: true },
+    include: {
+      event: true,
+      owner: { select: { id: true, email: true, publicKey: true } },
+      transfers: { select: { id: true } },
+    },
   });
 
   if (!currentTicket) {
@@ -41,27 +45,34 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
   const rootOriginId = currentTicket.originTicket || currentTicket.id;
   const rootTicket = await db.ticket.findUnique({
     where: { id: rootOriginId },
-    include: { event: true, owner: true },
+    include: {
+      event: true,
+      owner: { select: { id: true, email: true, publicKey: true } },
+    },
   });
 
-  const allTickets = await db.ticket.findMany({
-    include: { owner: true, event: true },
+  const relatedTickets = await db.ticket.findMany({
+    where: {
+      OR: [{ id: rootOriginId }, { originTicket: rootOriginId }],
+    },
+    include: {
+      owner: { select: { id: true, email: true, publicKey: true } },
+      event: true,
+    },
   });
-
-  const relatedTickets = allTickets.filter(
-    (t: any) => t.id === rootOriginId || t.originTicket === rootOriginId
-  );
 
   const relatedTicketIds = new Set(relatedTickets.map((t: any) => t.id));
   relatedTicketIds.add(rootOriginId);
 
-  const allTransfers = await db.transfer.findMany({
-    include: { fromUser: true, toUser: true, ticket: true },
+  const relatedTransfers = await db.transfer.findMany({
+    where: { ticketId: { in: Array.from(relatedTicketIds) } },
+    include: {
+      fromUser: { select: { id: true, email: true, publicKey: true } },
+      toUser: { select: { id: true, email: true, publicKey: true } },
+      ticket: { select: { id: true } },
+    },
+    orderBy: { createdAt: "asc" },
   });
-
-  const relatedTransfers = allTransfers
-    .filter((tr: any) => relatedTicketIds.has(tr.ticketId))
-    .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const timeline: ProvenanceTimelineItem[] = [];
 
@@ -92,11 +103,15 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
         email: transfer.fromUser.email,
         publicKey: transfer.fromUser.publicKey,
       },
-      recipient: {
-        id: transfer.toUser.id,
-        email: transfer.toUser.email,
-        publicKey: transfer.toUser.publicKey,
-      },
+      ...(transfer.toUser
+        ? {
+            recipient: {
+              id: transfer.toUser.id,
+              email: transfer.toUser.email,
+              publicKey: transfer.toUser.publicKey,
+            },
+          }
+        : {}),
       details: {
         ticketId: transfer.ticketId,
         proofHash: transfer.proofHash,
@@ -115,8 +130,26 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
     transferCount: t.transferCount,
   }));
 
+  // Provenance views must never expose a live QR payload. The ticket's
+  // current holder can retrieve that credential through the authenticated wallet.
+  const safeTicket = {
+    id: currentTicket.id,
+    eventId: currentTicket.eventId,
+    ownerId: currentTicket.ownerId,
+    section: currentTicket.section,
+    row: currentTicket.row,
+    seat: currentTicket.seat,
+    status: currentTicket.status,
+    originTicket: currentTicket.originTicket,
+    transferCount: currentTicket.transferCount,
+    invalidatedAt: currentTicket.invalidatedAt,
+    replacedByTicketId: currentTicket.replacedByTicketId,
+    createdAt: currentTicket.createdAt,
+    event: currentTicket.event,
+  };
+
   return {
-    ticket: currentTicket,
+    ticket: safeTicket,
     rootOriginId,
     timeline,
     allHolders,

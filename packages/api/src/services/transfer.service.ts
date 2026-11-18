@@ -43,7 +43,7 @@ export async function createTransfer(params: {
 
   const ticket = await db.ticket.findUnique({
     where: { id: ticketId },
-    include: { owner: true, event: true },
+    select: { id: true, ownerId: true, status: true },
   });
 
   if (!ticket) {
@@ -70,7 +70,8 @@ export async function createTransfer(params: {
 
   const timestamp = new Date().toISOString();
   const nonce = generateNonce();
-  const toIdentifier = recipient?.id || toEmail;
+  // Never put an unregistered recipient's email address in the public proof.
+  const toIdentifier = recipient?.id || `email:${computeSha256(toEmail)}`;
 
   const canonicalDoc = createCanonicalTransferDoc({
     ticketId: ticket.id,
@@ -83,27 +84,52 @@ export async function createTransfer(params: {
   const proofHash = computeSha256(canonicalDoc);
   const senderSig = signWithEd25519(proofHash, decryptedSenderPriv);
 
-  const transfer = await db.transfer.create({
-    data: {
-      ticketId: ticket.id,
-      fromUserId: senderUser.id,
-      toUserId: recipient?.id ?? null,
-      toEmail,
-      status: "PENDING",
-      proofHash,
-      senderSig,
-      createdAt: new Date(timestamp),
-    },
-    include: {
-      ticket: { include: { event: true } },
-      fromUser: true,
-      toUser: true,
-    },
-  });
+  const transfer = await db.$transaction(async (tx) => {
+    // Claim the ticket state first with a conditional update. This prevents two
+    // concurrent requests from creating pending transfers for the same ticket.
+    const ticketClaim = await tx.ticket.updateMany({
+      where: {
+        id: ticket.id,
+        ownerId: senderUser.id,
+        status: "ACTIVE",
+      },
+      data: { status: "TRANSFER_PENDING" },
+    });
 
-  await db.ticket.update({
-    where: { id: ticket.id },
-    data: { status: "TRANSFER_PENDING" },
+    if (ticketClaim.count !== 1) {
+      throw new Error("Ticket is no longer available to transfer");
+    }
+
+    return tx.transfer.create({
+      data: {
+        ticketId: ticket.id,
+        fromUserId: senderUser.id,
+        toUserId: recipient?.id ?? null,
+        toEmail,
+        status: "PENDING",
+        proofHash,
+        proofDocument: canonicalDoc,
+        senderSig,
+        createdAt: new Date(timestamp),
+      },
+      include: {
+        ticket: {
+          select: {
+            id: true,
+            eventId: true,
+            section: true,
+            row: true,
+            seat: true,
+            status: true,
+            transferCount: true,
+            createdAt: true,
+            event: { select: { id: true, name: true, venue: true, startsAt: true } },
+          },
+        },
+        fromUser: { select: { id: true, email: true, publicKey: true } },
+        toUser: { select: { id: true, email: true, publicKey: true } },
+      },
+    });
   });
 
   const notificationPayload = {
@@ -128,7 +154,27 @@ export async function acceptTransfer(params: {
 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
-    include: { ticket: { include: { event: true } }, fromUser: true, toUser: true },
+    select: {
+      id: true,
+      ticketId: true,
+      fromUserId: true,
+      toEmail: true,
+      toUserId: true,
+      status: true,
+      proofHash: true,
+      ticket: {
+        select: {
+          id: true,
+          eventId: true,
+          section: true,
+          row: true,
+          seat: true,
+          originTicket: true,
+          transferCount: true,
+          status: true,
+        },
+      },
+    },
   });
 
   if (!transfer) {
@@ -140,17 +186,12 @@ export async function acceptTransfer(params: {
   }
 
   const recipientEmail = String(recipientUser.email || "").toLowerCase().trim();
-  const transferToEmail = String(transfer.toEmail || transfer.toUser?.email || "").toLowerCase().trim();
+  const transferToEmail = String(transfer.toEmail || "").toLowerCase().trim();
   const emailMatches = transferToEmail && transferToEmail === recipientEmail;
   const idMatches = transfer.toUserId && transfer.toUserId === recipientUser.id;
 
   if (!emailMatches && !idMatches) {
     throw new Error("Register with this email first");
-  }
-
-  // ensure toUserId set if null (recipient registered/claimed)
-  if (!transfer.toUserId && emailMatches) {
-    await db.transfer.update({ where: { id: transfer.id }, data: { toUserId: recipientUser.id } });
   }
 
   if (!params.recipientPassword) {
@@ -185,45 +226,76 @@ export async function acceptTransfer(params: {
 
   const recipientTicketId = `${originalTicket.id}#${transfer.id}`;
 
-  const recipientTicket = await db.ticket.create({
-    data: {
-      id: recipientTicketId,
-      eventId: originalTicket.eventId,
-      ownerId: recipientUser.id,
-      section: originalTicket.section,
-      row: originalTicket.row,
-      seat: originalTicket.seat,
-      status: "ACTIVE",
-      qrPayload: recipientQrPayload,
-      originTicket: rootOriginId,
-      transferCount: originalTicket.transferCount || 0,
-    },
-    include: { event: true, owner: true },
-  });
+  const { recipientTicket, updatedTransfer } = await db.$transaction(async (tx) => {
+    const transferClaim = await tx.transfer.updateMany({
+      where: { id: transfer.id, status: "PENDING" },
+      data: {
+        status: "ACCEPTED",
+        receiverSig,
+        acceptedAt,
+        toUserId: recipientUser.id,
+      },
+    });
+    if (transferClaim.count !== 1) {
+      throw new Error("Transfer is no longer pending");
+    }
 
-  await db.ticket.update({
-    where: { id: originalTicket.id },
-    data: {
-      status: "TRANSFERRED",
-      invalidatedAt: new Date(),
-      replacedByTicketId: recipientTicket.id,
-      transferCount: (originalTicket.transferCount || 0) + 1,
-    },
-  });
+    const ticketClaim = await tx.ticket.updateMany({
+      where: {
+        id: originalTicket.id,
+        ownerId: transfer.fromUserId,
+        status: "TRANSFER_PENDING",
+      },
+      data: {
+        status: "TRANSFERRED",
+        invalidatedAt: acceptedAt,
+        replacedByTicketId: recipientTicketId,
+        transferCount: (originalTicket.transferCount || 0) + 1,
+      },
+    });
+    if (ticketClaim.count !== 1) {
+      throw new Error("Original ticket is no longer transferable");
+    }
 
-  const updatedTransfer = await db.transfer.update({
-    where: { id: transfer.id },
-    data: {
-      status: "ACCEPTED",
-      receiverSig,
-      acceptedAt,
-      toUserId: recipientUser.id,
-    },
-    include: {
-      ticket: { include: { event: true } },
-      fromUser: true,
-      toUser: true,
-    },
+    const createdTicket = await tx.ticket.create({
+      data: {
+        id: recipientTicketId,
+        eventId: originalTicket.eventId,
+        ownerId: recipientUser.id,
+        section: originalTicket.section,
+        row: originalTicket.row,
+        seat: originalTicket.seat,
+        status: "ACTIVE",
+        qrPayload: recipientQrPayload,
+        originTicket: rootOriginId,
+        transferCount: originalTicket.transferCount || 0,
+      },
+      include: { event: true, owner: { select: { id: true, email: true, publicKey: true } } },
+    });
+
+    const updated = await tx.transfer.findUnique({
+      where: { id: transfer.id },
+      include: {
+        ticket: {
+          select: {
+            id: true,
+            eventId: true,
+            section: true,
+            row: true,
+            seat: true,
+            status: true,
+            transferCount: true,
+            createdAt: true,
+            event: { select: { id: true, name: true, venue: true, startsAt: true } },
+          },
+        },
+        fromUser: { select: { id: true, email: true, publicKey: true } },
+        toUser: { select: { id: true, email: true, publicKey: true } },
+      },
+    });
+    if (!updated) throw new Error("Transfer record disappeared during acceptance");
+
+    return { recipientTicket: createdTicket, updatedTransfer: updated };
   });
 
   return {
@@ -240,7 +312,7 @@ export async function revokeTransfer(params: {
 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
-    include: { ticket: true },
+    select: { id: true, ticketId: true, fromUserId: true, status: true },
   });
 
   if (!transfer) {
@@ -255,17 +327,29 @@ export async function revokeTransfer(params: {
     throw new Error("Only PENDING transfers can be revoked");
   }
 
-  const updatedTransfer = await db.transfer.update({
-    where: { id: transfer.id },
-    data: { status: "REVOKED" },
-  });
+  return db.$transaction(async (tx) => {
+    const transferClaim = await tx.transfer.updateMany({
+      where: { id: transfer.id, fromUserId: senderUserId, status: "PENDING" },
+      data: { status: "REVOKED" },
+    });
+    if (transferClaim.count !== 1) {
+      throw new Error("Transfer is no longer pending");
+    }
 
-  await db.ticket.update({
-    where: { id: transfer.ticketId },
-    data: { status: "ACTIVE" },
-  });
+    const ticketClaim = await tx.ticket.updateMany({
+      where: {
+        id: transfer.ticketId,
+        ownerId: senderUserId,
+        status: "TRANSFER_PENDING",
+      },
+      data: { status: "ACTIVE" },
+    });
+    if (ticketClaim.count !== 1) {
+      throw new Error("Ticket is no longer pending transfer");
+    }
 
-  return updatedTransfer;
+    return tx.transfer.findUnique({ where: { id: transfer.id } });
+  });
 }
 
 export async function expireOldPendingTransfers(cutoffHours = 24): Promise<number> {
@@ -275,22 +359,32 @@ export async function expireOldPendingTransfers(cutoffHours = 24): Promise<numbe
       status: "PENDING",
       createdAt: { lt: cutoffTime },
     },
-    include: { ticket: true },
+    select: { id: true, ticketId: true, fromUserId: true, createdAt: true, status: true },
   });
 
   let count = 0;
   for (const transfer of pendingTransfers) {
-    await db.transfer.update({
-      where: { id: transfer.id },
-      data: { status: "EXPIRED" },
-    });
-    if (transfer.ticketId) {
-      await db.ticket.update({
-        where: { id: transfer.ticketId },
+    const expired = await db.$transaction(async (tx) => {
+      const transferClaim = await tx.transfer.updateMany({
+        where: { id: transfer.id, status: "PENDING", createdAt: { lt: cutoffTime } },
+        data: { status: "EXPIRED" },
+      });
+      if (transferClaim.count !== 1) return false;
+
+      const ticketClaim = await tx.ticket.updateMany({
+        where: {
+          id: transfer.ticketId,
+          ownerId: transfer.fromUserId,
+          status: "TRANSFER_PENDING",
+        },
         data: { status: "ACTIVE" },
       });
-    }
-    count += 1;
+      if (ticketClaim.count !== 1) {
+        throw new Error(`Ticket state is inconsistent while expiring transfer ${transfer.id}`);
+      }
+      return true;
+    });
+    if (expired) count += 1;
   }
 
   return count;
@@ -300,9 +394,9 @@ export async function getTransferProofDetails(transferId: string): Promise<any> 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
     include: {
-      fromUser: true,
-      toUser: true,
-      ticket: { include: { event: true } },
+      fromUser: { select: { id: true, publicKey: true } },
+      toUser: { select: { id: true, publicKey: true } },
+      ticket: { select: { id: true } },
     },
   });
 
@@ -310,18 +404,10 @@ export async function getTransferProofDetails(transferId: string): Promise<any> 
     throw new Error("Transfer not found");
   }
 
-  const canonicalDoc = createCanonicalTransferDoc({
-    ticketId: transfer.ticketId,
-    from: transfer.fromUserId,
-    to: transfer.toUserId || transfer.toEmail,
-    ts: new Date(transfer.createdAt).toISOString(),
-    nonce: "canonical-nonce-placeholder",
-  });
-
   return {
     transferId: transfer.id,
     ticketId: transfer.ticketId,
-    canonicalDoc,
+    canonicalDoc: transfer.proofDocument,
     proofHash: transfer.proofHash,
     senderSig: transfer.senderSig,
     receiverSig: transfer.receiverSig,
@@ -337,9 +423,9 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
     include: {
-      fromUser: true,
-      toUser: true,
-      ticket: { include: { event: true } },
+      fromUser: { select: { id: true, publicKey: true } },
+      toUser: { select: { id: true, publicKey: true } },
+      ticket: { select: { id: true } },
     },
   });
 
@@ -348,11 +434,51 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
   }
 
   const checks: VerificationCheck[] = [];
+  let proofDocumentValid = false;
+  if (transfer.proofDocument) {
+    try {
+      const document = JSON.parse(transfer.proofDocument) as {
+        ticketId?: string;
+        from?: string;
+        to?: string;
+        ts?: string;
+        nonce?: string;
+      };
+      const recipientIdentifierMatches =
+        document.to === transfer.toUserId ||
+        document.to === `email:${computeSha256(transfer.toEmail)}`;
+      const canonicalDocument = createCanonicalTransferDoc({
+        ticketId: String(document.ticketId || ""),
+        from: String(document.from || ""),
+        to: String(document.to || ""),
+        ts: String(document.ts || ""),
+        nonce: String(document.nonce || ""),
+      });
+      proofDocumentValid =
+        Boolean(document.nonce) &&
+        document.ticketId === transfer.ticketId &&
+        document.from === transfer.fromUserId &&
+        recipientIdentifierMatches &&
+        new Date(String(document.ts)).getTime() === transfer.createdAt.getTime() &&
+        canonicalDocument === transfer.proofDocument &&
+        computeSha256(transfer.proofDocument) === transfer.proofHash;
+    } catch {
+      proofDocumentValid = false;
+    }
+  }
+
+  checks.push({
+    name: "proof_document_hash",
+    passed: proofDocumentValid,
+    details: proofDocumentValid
+      ? "Canonical document fields, recipient binding, timestamp, and SHA-256 hash verified"
+      : "Canonical document is missing, malformed, mismatched, or does not match the recorded hash",
+  });
 
   const senderPubkey = transfer.fromUser?.publicKey;
   const receiverPubkey = transfer.toUser?.publicKey;
 
-  const senderSigValid = senderPubkey
+  const senderSigValid = proofDocumentValid && senderPubkey
     ? verifyEd25519Signature(transfer.proofHash, transfer.senderSig, senderPubkey)
     : false;
 
@@ -364,10 +490,21 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
       : "Sender signature verification failed",
   });
 
+  const receiverSignaturePresent = Boolean(transfer.receiverSig);
+  const receiverSignatureExpected = transfer.status === "ACCEPTED";
+  const receiverSignatureStateValid = receiverSignaturePresent === receiverSignatureExpected;
+  checks.push({
+    name: "receiver_signature_state",
+    passed: receiverSignatureStateValid,
+    details: receiverSignatureStateValid
+      ? "Receiver signature presence matches the transfer status"
+      : "Accepted transfers require a receiver signature, and non-accepted transfers must not have one",
+  });
+
   let receiverSigValid = true;
-  if (transfer.receiverSig) {
-    receiverSigValid = receiverPubkey
-      ? verifyEd25519Signature(transfer.proofHash, transfer.receiverSig, receiverPubkey)
+  if (receiverSignaturePresent) {
+    receiverSigValid = proofDocumentValid && receiverPubkey
+      ? verifyEd25519Signature(transfer.proofHash, transfer.receiverSig!, receiverPubkey)
       : false;
 
     checks.push({
@@ -379,11 +516,24 @@ export async function verifyTransferRecord(transferId: string): Promise<Verifica
     });
   }
 
-  const overallValid = senderSigValid && receiverSigValid;
+  const overallValid =
+    proofDocumentValid && senderSigValid && receiverSigValid && receiverSignatureStateValid;
+  const safeTransfer = {
+    id: transfer.id,
+    ticketId: transfer.ticketId,
+    fromUserId: transfer.fromUserId,
+    toUserId: transfer.toUserId,
+    status: transfer.status,
+    proofHash: transfer.proofHash,
+    senderSig: transfer.senderSig,
+    receiverSig: transfer.receiverSig,
+    createdAt: transfer.createdAt,
+    acceptedAt: transfer.acceptedAt,
+  };
 
   return {
     valid: overallValid,
     checks,
-    transfer,
+    transfer: safeTransfer,
   };
 }

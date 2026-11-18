@@ -7,6 +7,7 @@ import { FastifyInstance } from "fastify";
 describe("Ticket Claiming & QR Cryptography", () => {
   let app: FastifyInstance;
   let aliceToken: string;
+  let aliceId: string;
   let bobToken: string;
 
   beforeAll(async () => {
@@ -20,6 +21,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
       payload: { email: "alice@demo.test", password: "demo1234" },
     });
     aliceToken = aliceRes.json().accessToken;
+    aliceId = aliceRes.json().user.id;
 
     const bobRes = await app.inject({
       method: "POST",
@@ -33,6 +35,34 @@ describe("Ticket Claiming & QR Cryptography", () => {
     await app.close();
   });
 
+  it("should keep refresh tokens out of protected routes and require them on refresh", async () => {
+    const refreshToken = app.jwt.sign(
+      { id: aliceId, email: "alice@demo.test", type: "refresh" },
+      { expiresIn: "1h" }
+    );
+
+    const refreshAsAccess = await app.inject({
+      method: "GET",
+      url: "/api/tickets",
+      headers: { authorization: `Bearer ${refreshToken}` },
+    });
+    expect(refreshAsAccess.statusCode).toBe(401);
+
+    const accessAsRefresh = await app.inject({
+      method: "POST",
+      url: "/api/auth/refresh",
+      headers: { cookie: `refresh_token=${aliceToken}` },
+    });
+    expect(accessAsRefresh.statusCode).toBe(401);
+
+    const validRefresh = await app.inject({
+      method: "POST",
+      url: "/api/auth/refresh",
+      headers: { cookie: `refresh_token=${refreshToken}` },
+    });
+    expect(validRefresh.statusCode).toBe(200);
+  });
+
   it("should claim an unclaimed seat and return a valid signed QR payload and image", async () => {
     const claimRes = await app.inject({
       method: "POST",
@@ -43,6 +73,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "D",
         row: "5",
         seat: "10",
+        password: "demo1234",
       },
     });
 
@@ -54,12 +85,49 @@ describe("Ticket Claiming & QR Cryptography", () => {
     expect(body.ticket.seat).toBe("10");
     expect(body.qrPng).toMatch(/^data:image\/png;base64,/);
 
+    const publicEvent = await app.inject({
+      method: "GET",
+      url: "/api/events/event_arena_night",
+    });
+    expect(publicEvent.statusCode).toBe(200);
+    expect(publicEvent.json().event.tickets).toBeUndefined();
+    expect(publicEvent.json().claimedSeats.some((seat: any) => seat.ticketId === body.ticket.id)).toBe(true);
+
     const envelopeVerification = verifySignedQrEnvelope(body.ticket.qrPayload);
     expect(envelopeVerification.valid).toBe(true);
     expect(envelopeVerification.expiredForDisplay).toBe(false);
     expect(envelopeVerification.envelope?.payload.sec).toBe("D");
     expect(envelopeVerification.envelope?.payload.row).toBe("5");
     expect(envelopeVerification.envelope?.payload.seat).toBe("10");
+  });
+
+  it("should require the correct account password to sign a ticket", async () => {
+    const missingPassword = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_arena_night",
+        section: "D",
+        row: "5",
+        seat: "8",
+      },
+    });
+    expect(missingPassword.statusCode).toBe(400);
+
+    const wrongPassword = await app.inject({
+      method: "POST",
+      url: "/api/tickets/claim",
+      headers: { authorization: `Bearer ${aliceToken}` },
+      payload: {
+        eventId: "event_arena_night",
+        section: "D",
+        row: "5",
+        seat: "8",
+        password: "not-the-account-password",
+      },
+    });
+    expect(wrongPassword.statusCode).toBe(401);
   });
 
   it("should return 409 conflict when claiming an already-claimed seat", async () => {
@@ -72,6 +140,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "D",
         row: "5",
         seat: "10",
+        password: "demo1234",
       },
     });
 
@@ -89,6 +158,7 @@ describe("Ticket Claiming & QR Cryptography", () => {
         section: "C",
         row: "4",
         seat: "9",
+        password: "demo1234",
       },
     });
 
