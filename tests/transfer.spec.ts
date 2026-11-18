@@ -285,7 +285,7 @@ if (reg.statusCode === 201) {
         eventId: "event_theater_gala",
         section: "A",
         row: "1",
-        seat: "5",
+        seat: "9",
         password: "demo1234",
       },
     });
