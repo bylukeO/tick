@@ -1,44 +1,4 @@
-# flyctl launch added from .gitignore
-# Dependencies
 **/node_modules
-**/**/node_modules
-
-# Environment files
+**/dist
 **/.env
 **/.env.*
-!**/.env.example
-
-# Build and generated output
-dist
-**/**/dist
-**/coverage
-**/.vite
-**/.cache
-**/*.tsbuildinfo
-
-# Test artifacts
-test-results
-**/**/test-results
-**/playwright-report
-
-# Logs
-**/*.log
-**/logs
-
-# OS/editor files
-**/.DS_Store
-**/Thumbs.db
-
-# Temporary debug files
-tmp-dbg*
-**/**/tmp-dbg*
-**/*.tmp
-
-# Local debug scripts
-**/*tmp-dbg*
-
-# flyctl launch added from node_modules/.pnpm/tailwindcss@3.4.1/node_modules/tailwindcss/stubs/.gitignore
-!node_modules/.pnpm/tailwindcss@3.4.1/node_modules/tailwindcss/stubs/**/*
-fly.toml
-.git
-.env
