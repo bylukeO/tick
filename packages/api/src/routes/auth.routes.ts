@@ -147,6 +147,9 @@ export async function authRoutes(server: FastifyInstance): Promise<void> {
       const decoded = server.jwt.verify<{ id: string; email: string; type?: string }>(
         refreshToken
       );
+      if (decoded.type !== "refresh") {
+        return reply.code(401).send({ error: "Invalid refresh token" });
+      }
 
       const user = await db.user.findUnique({ where: { id: decoded.id } });
       if (!user) {
