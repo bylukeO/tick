@@ -36,7 +36,8 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
       }
 
       const seatMap = event.seatMap as Record<string, Record<string, string[]>>;
-      if (!seatMap?.[section]?.[row]?.includes(seat)) {
+      const validSeats = seatMap?.[section]?.[row];
+      if (!Array.isArray(validSeats) || !validSeats.includes(seat)) {
         return reply.code(400).send({ error: "The selected seat does not exist for this event" });
       }
 
