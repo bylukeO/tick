@@ -46,6 +46,7 @@ model Ticket {
   owner         User         @relation(fields: [ownerId], references: [id])
   transfers     Transfer[]
 
+  @@unique([eventId, section, row, seat])
 }
 
 model Transfer {
@@ -56,6 +57,7 @@ model Transfer {
   toUserId    String?
   status      TransferStatus @default(PENDING)
   proofHash   String
+  proofDocument String?
   senderSig   String
   receiverSig String?
   createdAt   DateTime       @default(now())
