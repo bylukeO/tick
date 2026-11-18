@@ -74,6 +74,22 @@ if (reg.statusCode === 201) {
     const ticketId = claimRes.json().ticket.id;
     const originalSenderQr = claimRes.json().ticket.qrPayload;
 
+    const foreignTicketDetail = await app.inject({
+      method: "GET",
+      url: `/api/tickets/${ticketId}`,
+      headers: { authorization: `Bearer ${bobToken}` },
+    });
+    expect(foreignTicketDetail.statusCode).toBe(404);
+
+    const ownerTicketDetail = await app.inject({
+      method: "GET",
+      url: `/api/tickets/${ticketId}`,
+      headers: { authorization: `Bearer ${aliceToken}` },
+    });
+    expect(ownerTicketDetail.statusCode).toBe(200);
+    expect(ownerTicketDetail.json().ticket.owner.passwordHash).toBeUndefined();
+    expect(ownerTicketDetail.json().ticket.owner.encryptedPriv).toBeUndefined();
+
     const transferRes = await app.inject({
       method: "POST",
       url: "/api/transfers",
@@ -91,6 +107,17 @@ if (reg.statusCode === 201) {
     expect(transfer.proofHash).toBeDefined();
     expect(transfer.senderSig).toBeDefined();
     expect(transfer.toEmail).toBe("recipient_verify@test.local");
+    expect(transfer.fromUser.passwordHash).toBeUndefined();
+    expect(transfer.fromUser.encryptedPriv).toBeUndefined();
+
+    const inbox = await app.inject({
+      method: "GET",
+      url: "/api/transfers",
+      headers: { authorization: `Bearer ${aliceToken}` },
+    });
+    expect(inbox.statusCode).toBe(200);
+    expect(inbox.json().outgoing[0].fromUser.passwordHash).toBeUndefined();
+    expect(inbox.json().outgoing[0].fromUser.encryptedPriv).toBeUndefined();
 
     const acceptRes = await app.inject({
       method: "POST",
