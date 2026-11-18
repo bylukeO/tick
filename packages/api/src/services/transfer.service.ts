@@ -113,7 +113,19 @@ export async function createTransfer(params: {
         createdAt: new Date(timestamp),
       },
       include: {
-        ticket: { include: { event: true } },
+        ticket: {
+          select: {
+            id: true,
+            eventId: true,
+            section: true,
+            row: true,
+            seat: true,
+            status: true,
+            transferCount: true,
+            createdAt: true,
+            event: { select: { id: true, name: true, venue: true, startsAt: true } },
+          },
+        },
         fromUser: { select: { id: true, email: true, publicKey: true } },
         toUser: { select: { id: true, email: true, publicKey: true } },
       },
@@ -143,7 +155,18 @@ export async function acceptTransfer(params: {
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
     include: {
-      ticket: { include: { event: true } },
+      ticket: {
+        select: {
+          id: true,
+          eventId: true,
+          section: true,
+          row: true,
+          seat: true,
+          originTicket: true,
+          transferCount: true,
+          status: true,
+        },
+      },
       fromUser: { select: { id: true, email: true } },
       toUser: { select: { id: true, email: true } },
     },
@@ -248,7 +271,19 @@ export async function acceptTransfer(params: {
     const updated = await tx.transfer.findUnique({
       where: { id: transfer.id },
       include: {
-        ticket: { include: { event: true } },
+        ticket: {
+          select: {
+            id: true,
+            eventId: true,
+            section: true,
+            row: true,
+            seat: true,
+            status: true,
+            transferCount: true,
+            createdAt: true,
+            event: { select: { id: true, name: true, venue: true, startsAt: true } },
+          },
+        },
         fromUser: { select: { id: true, email: true, publicKey: true } },
         toUser: { select: { id: true, email: true, publicKey: true } },
       },
@@ -272,7 +307,7 @@ export async function revokeTransfer(params: {
 
   const transfer = await db.transfer.findUnique({
     where: { id: transferId },
-    include: { ticket: true },
+    select: { id: true, ticketId: true, fromUserId: true, status: true },
   });
 
   if (!transfer) {
@@ -319,7 +354,7 @@ export async function expireOldPendingTransfers(cutoffHours = 24): Promise<numbe
       status: "PENDING",
       createdAt: { lt: cutoffTime },
     },
-    include: { ticket: true },
+    select: { id: true, ticketId: true, fromUserId: true, createdAt: true, status: true },
   });
 
   let count = 0;
