@@ -8,6 +8,7 @@ import {
 } from "../lib/crypto";
 import { createSignedQrPayload } from "../services/ticket.service";
 import { getTicketProvenanceHistory } from "../services/history.service";
+import { verifyPassword } from "../services/auth.service";
 
 export async function ticketRoutes(server: FastifyInstance): Promise<void> {
   server.post(
@@ -53,8 +54,12 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
       }
 
       const signingPassword = password;
-      let privateKeyBase64: string;
+      const passwordMatches = await verifyPassword(user.passwordHash, signingPassword);
+      if (!passwordMatches) {
+        return reply.code(401).send({ error: "Incorrect account password" });
+      }
 
+      let privateKeyBase64: string;
       if (!user.publicKey || !user.encryptedPriv) {
         const keyPair = generateEd25519KeyPair();
         const encryptedPriv = encryptPrivateKey(keyPair.privateKey, signingPassword);
@@ -66,7 +71,11 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
         user.encryptedPriv = encryptedPriv;
         privateKeyBase64 = keyPair.privateKey;
       } else {
-        privateKeyBase64 = decryptPrivateKey(user.encryptedPriv, signingPassword);
+        try {
+          privateKeyBase64 = decryptPrivateKey(user.encryptedPriv, signingPassword);
+        } catch {
+          return reply.code(401).send({ error: "Incorrect account password" });
+        }
       }
 
       const preliminaryId = `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
