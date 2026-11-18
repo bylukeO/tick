@@ -162,9 +162,24 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
     { preHandler: [(server as any).authenticate] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const ticket = await db.ticket.findUnique({
-        where: { id },
-        include: { event: true, owner: true, transfers: true },
+      const ticket = await db.ticket.findFirst({
+        where: { id, ownerId: request.user!.id },
+        include: {
+          event: true,
+          owner: { select: { id: true, email: true, publicKey: true } },
+          transfers: {
+            select: {
+              id: true,
+              status: true,
+              toEmail: true,
+              proofHash: true,
+              senderSig: true,
+              receiverSig: true,
+              createdAt: true,
+              acceptedAt: true,
+            },
+          },
+        },
       });
 
       if (!ticket) {
