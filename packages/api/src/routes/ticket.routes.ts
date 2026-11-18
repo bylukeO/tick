@@ -41,7 +41,13 @@ export async function ticketRoutes(server: FastifyInstance): Promise<void> {
       }
 
       const existingTicket = await db.ticket.findFirst({
-        where: { eventId, section, row, seat },
+        where: {
+          eventId,
+          section,
+          row,
+          seat,
+          status: { in: ["ACTIVE", "TRANSFER_PENDING"] },
+        },
       });
 
       if (existingTicket) {
