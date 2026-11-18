@@ -116,8 +116,26 @@ export async function getTicketProvenanceHistory(ticketId: string): Promise<{
     transferCount: t.transferCount,
   }));
 
+  // Provenance views must never expose a live QR payload. The ticket's
+  // current holder can retrieve that credential through the authenticated wallet.
+  const safeTicket = {
+    id: currentTicket.id,
+    eventId: currentTicket.eventId,
+    ownerId: currentTicket.ownerId,
+    section: currentTicket.section,
+    row: currentTicket.row,
+    seat: currentTicket.seat,
+    status: currentTicket.status,
+    originTicket: currentTicket.originTicket,
+    transferCount: currentTicket.transferCount,
+    invalidatedAt: currentTicket.invalidatedAt,
+    replacedByTicketId: currentTicket.replacedByTicketId,
+    createdAt: currentTicket.createdAt,
+    event: currentTicket.event,
+  };
+
   return {
-    ticket: currentTicket,
+    ticket: safeTicket,
     rootOriginId,
     timeline,
     allHolders,
