@@ -319,17 +319,27 @@ export async function expireOldPendingTransfers(cutoffHours = 24): Promise<numbe
 
   let count = 0;
   for (const transfer of pendingTransfers) {
-    await db.transfer.update({
-      where: { id: transfer.id },
-      data: { status: "EXPIRED" },
-    });
-    if (transfer.ticketId) {
-      await db.ticket.update({
-        where: { id: transfer.ticketId },
+    const expired = await db.$transaction(async (tx) => {
+      const transferClaim = await tx.transfer.updateMany({
+        where: { id: transfer.id, status: "PENDING", createdAt: { lt: cutoffTime } },
+        data: { status: "EXPIRED" },
+      });
+      if (transferClaim.count !== 1) return false;
+
+      const ticketClaim = await tx.ticket.updateMany({
+        where: {
+          id: transfer.ticketId,
+          ownerId: transfer.fromUserId,
+          status: "TRANSFER_PENDING",
+        },
         data: { status: "ACTIVE" },
       });
-    }
-    count += 1;
+      if (ticketClaim.count !== 1) {
+        throw new Error(`Ticket state is inconsistent while expiring transfer ${transfer.id}`);
+      }
+      return true;
+    });
+    if (expired) count += 1;
   }
 
   return count;
