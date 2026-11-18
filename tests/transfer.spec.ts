@@ -108,6 +108,20 @@ if (reg.statusCode === 201) {
     expect(acceptData.transfer.receiverSig).toBeDefined();
     expect(acceptData.recipientTicket.id).toBe(`${ticketId}#${transfer.id}`);
 
+    const anonymousHistory = await app.inject({
+      method: "GET",
+      url: `/api/tickets/${ticketId}/history`,
+    });
+    expect(anonymousHistory.statusCode).toBe(401);
+
+    const senderHistory = await app.inject({
+      method: "GET",
+      url: `/api/tickets/${ticketId}/history`,
+      headers: { authorization: `Bearer ${aliceToken}` },
+    });
+    expect(senderHistory.statusCode).toBe(200);
+    expect(senderHistory.json().ticket.qrPayload).toBeUndefined();
+
     const verifyRes = await app.inject({
       method: "GET",
       url: `/api/transfers/${transfer.id}/verify`,
