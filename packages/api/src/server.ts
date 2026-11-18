@@ -13,6 +13,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     logger: process.env.NODE_ENV === "test" ? false : true,
   });
 
+  if (process.env.NODE_ENV === "production" && !process.env.CORS_ORIGINS) {
+    throw new Error("CORS_ORIGINS must be configured in production");
+  }
   const configuredOrigins = (process.env.CORS_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
