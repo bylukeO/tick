@@ -4,7 +4,10 @@ import { db } from "../lib/db";
 export async function eventRoutes(server: FastifyInstance): Promise<void> {
   server.get("/api/events", async (_request, reply) => {
     const events = await db.event.findMany();
-    const tickets = await db.ticket.findMany({ select: { eventId: true } });
+    const tickets = await db.ticket.findMany({
+      where: { status: { in: ["ACTIVE", "TRANSFER_PENDING"] } },
+      select: { eventId: true },
+    });
 
     const formattedEvents = events.map((ev: any) => {
       const eventTickets = tickets.filter((t: any) => t.eventId === ev.id);
@@ -27,7 +30,7 @@ export async function eventRoutes(server: FastifyInstance): Promise<void> {
 
     // Public event data needs seat occupancy only, never ticket QR credentials.
     const eventTickets = await db.ticket.findMany({
-      where: { eventId: id },
+      where: { eventId: id, status: { in: ["ACTIVE", "TRANSFER_PENDING"] } },
       select: {
         id: true,
         section: true,
